@@ -6,7 +6,8 @@ const RESYNC_INTERVAL_MS = 60_000;
 
 /**
  * Derives live state for all three categories from timestamps only.
- * Recomputes every 60s while the app is visible and immediately on
+ * Recomputes immediately whenever the log list changes (so a freshly saved
+ * workout is reflected at once), every 60s while the app is visible, and on
  * `visibilitychange` — no background timers, mobile-friendly (spec §2).
  */
 export function useCategoryStates(
@@ -45,6 +46,13 @@ export function useCategoryStates(
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
+
+  // The mount-time `now` is stale by the time the user logs a session, and the
+  // engine ignores logs dated after `now` (clock-skew guard) — so re-sync the
+  // clock on every log change or the dashboard would lag until the next tick.
+  useEffect(() => {
+    setNow(Date.now());
+  }, [logs]);
 
   return useMemo(() => {
     const byCategory: Record<WorkoutCategory, WorkoutLog[]> = {
