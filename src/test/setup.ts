@@ -1,5 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// With explicit Vitest imports (globals: false), RTL's auto-cleanup never
+// registers — unmount and clear the DOM between tests explicitly.
+afterEach(() => {
+  cleanup();
+});
 
 // jsdom test environments may lack crypto.randomUUID (Node < 19 polyfill guard).
 if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {

@@ -100,14 +100,19 @@ export function useLongPress({
     [cancel, moveThresholdPx],
   );
 
-  const onPointerUp = useCallback(() => {
-    const wasFired = firedRef.current;
-    const wasCancelled = cancelledRef.current;
-    clearTimer();
-    if (!wasFired && !wasCancelled) {
-      callbacksRef.current.onClick?.();
-    }
-  }, [clearTimer]);
+  const onPointerUp = useCallback(
+    (event: ReactPointerEvent) => {
+      // Taps on nested controls (help/log buttons) belong to them, not the card.
+      if (shouldIgnore(event.target)) return;
+      const wasFired = firedRef.current;
+      const wasCancelled = cancelledRef.current;
+      clearTimer();
+      if (!wasFired && !wasCancelled) {
+        callbacksRef.current.onClick?.();
+      }
+    },
+    [clearTimer, shouldIgnore],
+  );
 
   const onKeyDown = useCallback((event: ReactKeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ') {

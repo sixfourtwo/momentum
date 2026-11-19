@@ -1,4 +1,4 @@
-import type { CategoryState, WorkoutCategory, WorkoutDifficulty, WorkoutLog } from '../types';
+import type { CategoryState, WorkoutCategory, WorkoutLog } from '../types';
 import {
   GAIN_POINTS,
   MAX_SCORE,
