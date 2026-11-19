@@ -67,6 +67,40 @@ describe('AppRepository', () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
+  it('updates its synchronous snapshot in the same tick as a mutation', async () => {
+    // Regression: the UI must never depend on an async re-read after a write.
+    await repository.hydrate();
+    expect(repository.isHydrated()).toBe(true);
+    expect(repository.getLogsSnapshot()).toEqual([]);
+
+    await repository.addLog(workout('a', 1000));
+    expect(repository.getLogsSnapshot().map((log) => log.id)).toEqual(['a']);
+
+    await repository.addLog(workout('b', 2000));
+    expect(repository.getLogsSnapshot().map((log) => log.id)).toEqual(['a', 'b']);
+
+    await repository.deleteLog('a');
+    expect(repository.getLogsSnapshot().map((log) => log.id)).toEqual(['b']);
+    expect(await repository.getAllLogs()).toHaveLength(1);
+  });
+
+  it('hydrate() marks the repository ready and publishes the snapshot', async () => {
+    // A fresh repository over the same underlying store must see persisted
+    // data once hydrated — this is what an app restart does.
+    const store = new InMemoryStrategy();
+    const writer = new AppRepository(store);
+    await writer.saveProfile(profile());
+    await writer.addLog(workout('s1', 1000));
+
+    const reader = new AppRepository(store);
+    expect(reader.isHydrated()).toBe(false);
+    expect(reader.getLogsSnapshot()).toEqual([]);
+    await reader.hydrate();
+    expect(reader.isHydrated()).toBe(true);
+    expect(reader.getProfileSnapshot()).toEqual(profile());
+    expect(reader.getLogsSnapshot().map((log) => log.id)).toEqual(['s1']);
+  });
+
   it('setStrategy swaps the backend at runtime and reloads data', async () => {
     const original = new InMemoryStrategy();
     repository.setStrategy(original);

@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import type { FitnessProfile, WorkoutLog } from '../types';
@@ -68,45 +69,41 @@ export function useAppRepository(): RepositoryContextValue {
   return context;
 }
 
+const EMPTY_LOGS: WorkoutLog[] = [];
+
 /**
- * Loads the profile and all logs, re-hydrating on every repository mutation.
- * Falls back to LocalStorage if the default driver fails (e.g. blocked
- * IndexedDB in private-mode Safari).
+ * Subscribes the UI to the repository's synchronous snapshot via
+ * `useSyncExternalStore`. Mutations update the snapshot in the same tick as
+ * the write, so the dashboard re-renders immediately — the async `hydrate()`
+ * only runs on mount, strategy swaps and cross-tab messages.
+ * Falls back to LocalStorage if the default driver fails on mount.
  */
 export function useAppData(): AppData & { reload: () => Promise<void> } {
-  const { repository, swapStrategy } = useAppRepository();
-  const [data, setData] = useState<AppData>({ profile: undefined, logs: [], hydrated: false });
+  const { repository, swapStrategy, strategyName } = useAppRepository();
 
-  const reload = useCallback(async () => {
-    const [profile, logs] = await Promise.all([repository.getProfile(), repository.getAllLogs()]);
-    setData({ profile, logs, hydrated: true });
-  }, [repository]);
+  const profile = useSyncExternalStore(
+    repository.subscribe,
+    () => repository.getProfileSnapshot(),
+    () => undefined,
+  );
+  const logs = useSyncExternalStore(
+    repository.subscribe,
+    () => repository.getLogsSnapshot(),
+    () => EMPTY_LOGS,
+  );
+  const hydrated = useSyncExternalStore(repository.subscribe, () => repository.isHydrated(), () => false);
 
   useEffect(() => {
-    let cancelled = false;
-    let fellBack = false;
-
-    const load = async () => {
-      try {
-        await reload();
-      } catch {
-        if (cancelled || fellBack) return;
-        fellBack = true;
-        swapStrategy(new LocalStorageStrategy());
-        await reload();
-      }
-    };
-    void load();
-
-    const unsubscribe = repository.onChange(() => {
-      void reload();
+    let alive = true;
+    repository.hydrate().catch(() => {
+      if (!alive) return;
+      swapStrategy(new LocalStorageStrategy());
+      void repository.hydrate().catch(() => undefined);
     });
-
     return () => {
-      cancelled = true;
-      unsubscribe();
+      alive = false;
     };
-  }, [repository, reload, swapStrategy]);
+  }, [repository, swapStrategy, strategyName]);
 
-  return { ...data, reload };
+  return { profile, logs, hydrated, reload: () => repository.hydrate() };
 }
